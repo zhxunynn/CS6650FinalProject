@@ -1,0 +1,6 @@
+<component name="ArtifactManager">
+  <artifact type="war" name="Upic">
+    <output-path>$PROJECT_DIR$/out/artifacts/Upic</output-path>
+    <root id="archive" name="Upic.war" />
+  </artifact>
+</component>

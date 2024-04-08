@@ -1,0 +1,6 @@
+<component name="ArtifactManager">
+  <artifact type="exploded-ear" name="upic_server">
+    <output-path>$PROJECT_DIR$/out/artifacts/upic_server</output-path>
+    <root id="root" />
+  </artifact>
+</component>
