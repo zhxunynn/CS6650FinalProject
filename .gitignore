@@ -13,6 +13,7 @@ target/
 *.ipr
 .idea/workspace.xml
 .idea/vcs.xml
+.idea
 
 ### Eclipse ###
 .apt_generated
