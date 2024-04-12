@@ -27,7 +27,7 @@ public class ClientApp {
     /**
      * The constant processedRequests.
      */
-    public static final AtomicInteger processedRequests = new AtomicInteger(0);
+    public static final AtomicInteger processedReqNum = new AtomicInteger(0);
 
     /**
      * The entry point of application.
@@ -38,10 +38,13 @@ public class ClientApp {
         BlockingQueue<ResortGetParam> queue = new LinkedBlockingQueue<>();
         startTime.set(System.currentTimeMillis());
 
-        Thread producerThread = new Thread(new ResortDataProducer(queue, TOTAL_REQUESTS));
-        producerThread.start();
 
-        ThreadPoolExecutor initialExecutorService = (ThreadPoolExecutor) Executors.newFixedThreadPool(INITIAL_THREAD_COUNT);
+        ThreadPoolExecutor producerExecutorService = (ThreadPoolExecutor) Executors.newFixedThreadPool(INITIAL_THREAD_COUNT);
+        for (int i = 0; i < INITIAL_THREAD_COUNT; i++) {
+            producerExecutorService.submit(new ResortDataProducer(queue, TOTAL_REQUESTS / INITIAL_THREAD_COUNT));
+        }
+
+        ThreadPoolExecutor consumerExecutorService = (ThreadPoolExecutor) Executors.newFixedThreadPool(INITIAL_THREAD_COUNT);
         ThreadPoolExecutor dynamicExecutorService = new ThreadPoolExecutor(
                 INITIAL_THREAD_COUNT, // Start with INITIAL_THREAD_COUNT to allow immediate expansion
                 Integer.MAX_VALUE, // Allow a large number of threads if needed
@@ -52,19 +55,19 @@ public class ClientApp {
 
         // Submit initial tasks to the initial pool
         for (int i = 0; i < INITIAL_THREAD_COUNT; i++) {
-            initialExecutorService.submit(new ResortDataConsumer(queue, REQUESTS_PER_THREAD, apiClient));
-            processedRequests.addAndGet(REQUESTS_PER_THREAD);
+            consumerExecutorService.submit(new ResortDataConsumer(queue, REQUESTS_PER_THREAD, apiClient));
+            processedReqNum.addAndGet(REQUESTS_PER_THREAD);
         }
 
-        initialExecutorService.shutdown();
+        consumerExecutorService.shutdown();
         // Continuously check if more tasks can be submitted
         dynamicExecutorService.submit(() -> {
             try {
-                while (processedRequests.get() < TOTAL_REQUESTS) {
+                while (processedReqNum.get() < TOTAL_REQUESTS) {
                     // Ensure not to exceed total request count
-                    if (processedRequests.get() + REQUESTS_PER_THREAD <= TOTAL_REQUESTS) {
+                    if (processedReqNum.get() + REQUESTS_PER_THREAD <= TOTAL_REQUESTS) {
                         dynamicExecutorService.submit(new ResortDataConsumer(queue, REQUESTS_PER_THREAD,apiClient));
-                        processedRequests.addAndGet(REQUESTS_PER_THREAD);
+                        processedReqNum.addAndGet(REQUESTS_PER_THREAD);
                     }
                 }
             } finally {

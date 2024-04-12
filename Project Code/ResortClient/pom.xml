@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>edu.northeastern.cs6650.Assignment4</groupId>
-    <artifactId>Resort-specific_Data_Client_Server</artifactId>
+    <artifactId>ResortClient</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>

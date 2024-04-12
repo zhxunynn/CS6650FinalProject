@@ -37,7 +37,7 @@ public class ResortDataConsumer implements Runnable {
                 ResortGetParam event = queue.take();
                 sendGetRequest(event);
                 processed++;
-                ClientApp.processedRequests.incrementAndGet(); // Update processed requests count in Part1.ClientApp
+                ClientApp.processedReqNum.incrementAndGet(); // Update processed requests count in Part1.ClientApp
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
