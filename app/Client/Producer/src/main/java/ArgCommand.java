@@ -15,6 +15,9 @@ public class ArgCommand {
     @Option(names = {"-l", "--latency"}, description = "the mode of testing latency")
     public static boolean isTestOnly = false;
 
+    @Option(names = {"-d", "--dayid"}, description = "Specify dayID")
+    public static int dayID = 1;
+
     public static String protocol = "http://";
     public static String serverURL;
 
