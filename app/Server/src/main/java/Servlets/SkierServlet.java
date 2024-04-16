@@ -1,5 +1,6 @@
 package Servlets;
 
+import Utils.Utilities;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -35,7 +36,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
-@WebServlet(name = "SkierServlet")
+@WebServlet(name = "SkierServlet", urlPatterns = {"/skiers/*"})
 public class SkierServlet extends HttpServlet {
     private static final String[] SKIER_POST_BODY = new String[]{"time", "liftID"};
     private static final String[] RESORT_GET_BODY = new String[]{"time","numSkiers"};
@@ -79,7 +80,7 @@ public class SkierServlet extends HttpServlet {
                 numChannel = configs.size() > 4 ? Integer.parseInt(configs.get(4)) : NUM_CHANNELS_DEFAULT; // Use default if not specified
                 rabbitMQName = configs.get(5);
                 jedisPool = new JedisPool(configs.get(6), Integer.parseInt(configs.get(7)));
-                logger.info("The config file is " + configs);
+                logger.info("The config file is {}", configs);
             }
             Connection connection = connectionFactory.newConnection();
             channelPool = new LinkedBlockingDeque<>();
@@ -91,17 +92,6 @@ public class SkierServlet extends HttpServlet {
         } catch (IOException | TimeoutException e) {
             logger.error(Arrays.toString(e.getStackTrace()));
         }
-    }
-
-    private boolean isUrlValid(String[] urlPath) {
-        if (urlPath.length == 8) {
-            return urlPath[1].chars().allMatch(Character::isDigit) &&
-                    urlPath[2].equals("seasons") && urlPath[3].chars().allMatch(Character::isDigit) &&
-                    urlPath[4].equals("days") && urlPath[5].chars().allMatch(Character::isDigit) &&
-                    urlPath[6].equals("skiers") && urlPath[7].chars().allMatch(Character::isDigit) &&
-                    Integer.parseInt(urlPath[5]) >= 1 && Integer.parseInt(urlPath[5]) <= 365;
-        }
-        return false;
     }
 
     @Override
@@ -133,22 +123,24 @@ public class SkierServlet extends HttpServlet {
             }
         }
 
-        if (!isUrlValid(parts)) {
+        if (!Utilities.isUrlValid(parts)) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             response.getWriter().write("{\"Message\": \"URL is not valid!\"}");
             return;
         }
 
         LiftRide liftRide = gson.fromJson(body, LiftRide.class);
-        int skierID = Integer.parseInt(parts[7]);
         int resortID = Integer.parseInt(parts[1]);
+        int seasonID = Integer.parseInt(parts[3]);
         int dayID = Integer.parseInt(parts[5]);
+        int skierID = Integer.parseInt(parts[7]);
         JsonObject msg = new JsonObject();
+        msg.add("resortID", new JsonPrimitive(resortID));
+        msg.add("seasonID", new JsonPrimitive(seasonID));
+        msg.add("dayID", new JsonPrimitive(dayID));
         msg.add("skierID", new JsonPrimitive(skierID));
         msg.add("time", new JsonPrimitive(liftRide.getTime()));
         msg.add("liftID", new JsonPrimitive(liftRide.getLiftID()));
-        msg.add("resortID", new JsonPrimitive(resortID));
-        msg.add("dayID", new JsonPrimitive(dayID));
         Channel channel = null;
         try {
             channel = channelPool.take();
@@ -172,30 +164,13 @@ public class SkierServlet extends HttpServlet {
         return false;
     }
 
-    //skiers/{resortID}/seasons/{seasonID}/days/{dayID}/skiers/{skierID}
-    private boolean isUrlValidForSkierVerticalInOneDay(String[] urlPath) {
-        if (urlPath.length == 8) {
-            return  urlPath[0].equals("skiers") &&
-                    urlPath[1].chars().allMatch(Character::isDigit) &&
-                    urlPath[2].equals("seasons") &&
-                    urlPath[3].chars().allMatch(Character::isDigit) &&
-                    urlPath[4].equals("days") &&
-                    urlPath[5].chars().allMatch(Character::isDigit) &&
-                    urlPath[6].equals("skiers") &&
-                    urlPath[7].chars().allMatch(Character::isDigit);
-        }
-        return false;
-    }
-
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-
-
         String[] urlParts = req.getPathInfo().split("/");
 
         //for vertical count
         boolean isCountTotalVertical = isUrlValidForSkiersVertical(urlParts);
-        boolean isCountTotalVerticalForOneDay = isUrlValidForSkierVerticalInOneDay(urlParts);
+        boolean isCountTotalVerticalForOneDay = Utilities.isUrlValidForSkierVerticalInOneDay(urlParts);
         if (isCountTotalVertical || isCountTotalVerticalForOneDay) {
             Jedis jedis = jedisPool.getResource();
             String skierId = urlParts[1];
@@ -213,24 +188,22 @@ public class SkierServlet extends HttpServlet {
             if (dayId != null) {
                 dayIds = storedEntry.get("dayID").split("_");
             }
-            Integer count = 0;
+            int count = 0;
             for (int i = 0; i < resortIds.length; i++) {
                 if (resort.equals(resortIds[i])) {
                     if (season != null && !season.equals(seasonIds[i])) continue;
                     if (dayId == null) {
-                        count += Integer.valueOf(liftIds[i]) * 10;
+                        count += Integer.parseInt(liftIds[i]) * 10;
                     } else {
                         if (dayId.equals(dayIds[i])) {
-                            count += Integer.valueOf(liftIds[i]) * 10;
+                            count += Integer.parseInt(liftIds[i]) * 10;
                         }
                     }
                 }
             }
 
             resp.setContentType("application/json");
-            // url link 不对不会被处理
             if (storedEntry.keySet().isEmpty()) {
-                // resort 和这个skierId无关
                 resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 resp.getWriter().write("{\"message\": \"Data not found\"}");
             } else {
@@ -253,6 +226,9 @@ public class SkierServlet extends HttpServlet {
                     channel.close();
                 }
                 channelPool.clear();
+            }
+            if (jedisPool != null) {
+                jedisPool.close();
             }
             circuitBreaker = null;
         } catch (IOException | TimeoutException e) {

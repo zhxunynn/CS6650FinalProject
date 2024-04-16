@@ -14,7 +14,7 @@ public class ConsumerThread implements Runnable{
     private final String queueName;
     private final Connection conn;
 
-    private JedisPool jedisPool;
+    private final JedisPool jedisPool;
     private final Gson gson = new Gson();
     private final static String DB_SEPARATOR = "_";
     public ConsumerThread(String queueName, Connection conn, JedisPool jedisPool){
@@ -41,7 +41,7 @@ public class ConsumerThread implements Runnable{
                     newRecord.add(json);
                     Consumer.records.put(skierID, newRecord);
                 }
-                Consumer.logger.info("Thread" + Thread.currentThread().getName() + " received: " + json);
+                Consumer.logger.info("Thread{} received: {}", Thread.currentThread().getName(), json);
                 channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
             };
             channel.basicConsume(this.queueName, false ,deliverCallback, consumerTag -> {});
@@ -54,19 +54,29 @@ public class ConsumerThread implements Runnable{
         try (Jedis jedis = jedisPool.getResource()) {
             JsonObject json = gson.fromJson(entry, JsonObject.class);
             String skierId = String.valueOf(json.get("skierID"));
+            String seasonId = String.valueOf(json.get("seasonID"));
             String time = String.valueOf(json.get("time"));
             String liftId = String.valueOf(json.get("liftID"));
             String resortId = String.valueOf(json.get("resortID"));
             String dayId = String.valueOf(json.get("dayID"));
-            Map<String, String> storedEntry = jedis.hgetAll(skierId);
-            if (storedEntry.isEmpty()) {
-                storedEntry = new HashMap<> (storedEntry);
-            }
-            storedEntry.put("time", storedEntry.getOrDefault("time", "") + DB_SEPARATOR + time);
-            storedEntry.put("liftID", storedEntry.getOrDefault("liftID", "") + DB_SEPARATOR + liftId);
-            storedEntry.put("resortID", storedEntry.getOrDefault("resortID", "") + DB_SEPARATOR + resortId);
-            storedEntry.put("dayID", storedEntry.getOrDefault("dayID", "") + DB_SEPARATOR + dayId);
-            jedis.hmset(skierId, storedEntry);
+
+            // Database - Key skiers
+            String skiersKey = String.format("skiers/%s", skierId);
+            String skiersFieldTime = String.format("time/resort%s_season%s_day%s", resortId, seasonId, dayId);
+            Consumer.logger.info(skiersFieldTime);
+            String currentTimeInDB = jedis.hget(skiersKey, skiersFieldTime);
+            currentTimeInDB = (currentTimeInDB == null) ? time : currentTimeInDB + DB_SEPARATOR + time;
+
+            jedis.hset(skiersKey, skiersFieldTime, currentTimeInDB);
+            String skiersFieldLiftID = String.format("liftID/resort%s_season%s_day%s", resortId, seasonId, dayId);
+            String currentLiftID = jedis.hget(skiersKey, skiersFieldLiftID);
+            currentLiftID = (currentLiftID == null) ? liftId : currentLiftID + DB_SEPARATOR + liftId;
+            jedis.hset(skiersKey, skiersFieldLiftID, currentLiftID);
+
+            // Database - Key Resorts
+            String resortsKey = String.format("resorts/resort%s_season%s_day%s", resortId, seasonId, dayId);
+            jedis.sadd(resortsKey, skierId);
+            Consumer.logger.info("Finish writing into database for skier: {}", skierId);
         } catch (Exception e) {
             Consumer.logger.error(Arrays.toString(e.getStackTrace()));
         }
