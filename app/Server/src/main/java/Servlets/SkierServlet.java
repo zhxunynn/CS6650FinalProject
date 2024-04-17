@@ -1,6 +1,5 @@
 package Servlets;
 
-import Utils.Utilities;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -36,7 +35,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
-@WebServlet(name = "SkierServlet", urlPatterns = {"/skiers/*"})
+@WebServlet(name = "SkierServlet")
 public class SkierServlet extends HttpServlet {
     private static final String[] SKIER_POST_BODY = new String[]{"time", "liftID"};
     private static final String[] RESORT_GET_BODY = new String[]{"time","numSkiers"};
@@ -80,7 +79,7 @@ public class SkierServlet extends HttpServlet {
                 numChannel = configs.size() > 4 ? Integer.parseInt(configs.get(4)) : NUM_CHANNELS_DEFAULT; // Use default if not specified
                 rabbitMQName = configs.get(5);
                 jedisPool = new JedisPool(configs.get(6), Integer.parseInt(configs.get(7)));
-                logger.info("The config file is {}", configs);
+                logger.info("The config file is " + configs);
             }
             Connection connection = connectionFactory.newConnection();
             channelPool = new LinkedBlockingDeque<>();
@@ -94,6 +93,30 @@ public class SkierServlet extends HttpServlet {
         }
     }
 
+    private boolean isUrlValid(String[] urlPath) {
+        if (urlPath.length == 8) {
+            return urlPath[1].chars().allMatch(Character::isDigit) &&
+                    urlPath[2].equals("seasons") && urlPath[3].chars().allMatch(Character::isDigit) &&
+                    urlPath[4].equals("days") && urlPath[5].chars().allMatch(Character::isDigit) &&
+                    urlPath[6].equals("skiers") && urlPath[7].chars().allMatch(Character::isDigit) &&
+                    Integer.parseInt(urlPath[5]) >= 1 && Integer.parseInt(urlPath[5]) <= 365;
+        }
+        return false;
+    }
+
+    // Utility method to validate URL for the GET request
+    ///GET resorts/{resortID}/seasons/{seasonID}/day/{dayID}/skiers
+    private boolean isUrlValidForResortGet(String[] urlPath) {
+        // Adjust this method based on your URL validation logic for GET request
+        // This is just an example based on your existing isUrlValid method
+        if (urlPath.length == 7) {
+            return urlPath[2].chars().allMatch(Character::isDigit) &&
+                    urlPath[3].equals("seasons") && urlPath[4].chars().allMatch(Character::isDigit) &&
+                    urlPath[5].equals("day") && urlPath[6].chars().allMatch(Character::isDigit) &&
+                    Integer.parseInt(urlPath[6]) >= 1 && Integer.parseInt(urlPath[6]) <= 365;
+        }
+        return false;
+    }
     @Override
     public void doPost(HttpServletRequest request, HttpServletResponse response) {
         circuitBreaker.executeRunnable(() -> {
@@ -123,24 +146,22 @@ public class SkierServlet extends HttpServlet {
             }
         }
 
-        if (!Utilities.isUrlValid(parts)) {
+        if (!isUrlValid(parts)) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             response.getWriter().write("{\"Message\": \"URL is not valid!\"}");
             return;
         }
 
         LiftRide liftRide = gson.fromJson(body, LiftRide.class);
-        int resortID = Integer.parseInt(parts[1]);
-        int seasonID = Integer.parseInt(parts[3]);
-        int dayID = Integer.parseInt(parts[5]);
         int skierID = Integer.parseInt(parts[7]);
+        int resortID = Integer.parseInt(parts[1]);
+        int dayID = Integer.parseInt(parts[5]);
         JsonObject msg = new JsonObject();
-        msg.add("resortID", new JsonPrimitive(resortID));
-        msg.add("seasonID", new JsonPrimitive(seasonID));
-        msg.add("dayID", new JsonPrimitive(dayID));
         msg.add("skierID", new JsonPrimitive(skierID));
         msg.add("time", new JsonPrimitive(liftRide.getTime()));
         msg.add("liftID", new JsonPrimitive(liftRide.getLiftID()));
+        msg.add("resortID", new JsonPrimitive(resortID));
+        msg.add("dayID", new JsonPrimitive(dayID));
         Channel channel = null;
         try {
             channel = channelPool.take();
@@ -155,6 +176,7 @@ public class SkierServlet extends HttpServlet {
                 channelPool.add(channel);
         }
     }
+
     private boolean isUrlValidForSkiersVertical(String[] urlPath) {
         if (urlPath.length == 3) {
             return  urlPath[0].equals("skiers") &&
@@ -164,56 +186,106 @@ public class SkierServlet extends HttpServlet {
         return false;
     }
 
+    //skiers/{resortID}/seasons/{seasonID}/days/{dayID}/skiers/{skierID}
+    private boolean isUrlValidForSkierVerticalInOneDay(String[] urlPath) {
+        if (urlPath.length == 8) {
+            return  urlPath[0].equals("skiers") &&
+                    urlPath[1].chars().allMatch(Character::isDigit) &&
+                    urlPath[2].equals("seasons") &&
+                    urlPath[3].chars().allMatch(Character::isDigit) &&
+                    urlPath[4].equals("days") &&
+                    urlPath[5].chars().allMatch(Character::isDigit) &&
+                    urlPath[6].equals("skiers") &&
+                    urlPath[7].chars().allMatch(Character::isDigit);
+        }
+        return false;
+    }
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+
+
         String[] urlParts = req.getPathInfo().split("/");
 
         //for vertical count
         boolean isCountTotalVertical = isUrlValidForSkiersVertical(urlParts);
-        boolean isCountTotalVerticalForOneDay = Utilities.isUrlValidForSkierVerticalInOneDay(urlParts);
+        boolean isCountTotalVerticalForOneDay = isUrlValidForSkierVerticalInOneDay(urlParts);
         if (isCountTotalVertical || isCountTotalVerticalForOneDay) {
             Jedis jedis = jedisPool.getResource();
             String skierId = urlParts[1];
-            String resort = isCountTotalVertical ? req.getParameter("resort") : urlParts[1];
-            String season = isCountTotalVertical ? req.getParameter("season") : urlParts[3];
-            String dayId = isCountTotalVerticalForOneDay ? urlParts[7] : null;
-            Map<String, String> storedEntry = jedis.hgetAll(skierId);
-            String[] resortIds = storedEntry.get("resortID").split("_");
-            String[] liftIds = storedEntry.get("liftID").split("_");
-            String[] seasonIds = null;
-            String[] dayIds = null;
-            if (season != null) {
-                seasonIds = storedEntry.get("seasonID").split("_");
-            }
-            if (dayId != null) {
-                dayIds = storedEntry.get("dayID").split("_");
-            }
+            String resortId = isCountTotalVertical ? req.getParameter("resort") : urlParts[1];
+            String seasonId = isCountTotalVertical ? req.getParameter("season") : urlParts[3];
+            // if season == null, season range is (2024, 2024) by Data Generation
+            // if dayId == null, day range is (1, 1) by Data Generation
+            // if season or dayId is not fixed, the structure should be replaced by for loop to count total
+            if (seasonId == null) seasonId = "2024";
+            String dayId = isCountTotalVerticalForOneDay ? urlParts[7] : "1";
+
+            String skiersKey = String.format("skiers/%s", skierId);
+            String skiersFieldLiftID = String.format("liftID/resort%s_season%s_day%s", resortId, seasonId, dayId);
+            String currentLiftID = jedis.hget(skiersKey, skiersFieldLiftID);
+            String[] LiftIds = currentLiftID.split("_");
             int count = 0;
-            for (int i = 0; i < resortIds.length; i++) {
-                if (resort.equals(resortIds[i])) {
-                    if (season != null && !season.equals(seasonIds[i])) continue;
-                    if (dayId == null) {
-                        count += Integer.parseInt(liftIds[i]) * 10;
-                    } else {
-                        if (dayId.equals(dayIds[i])) {
-                            count += Integer.parseInt(liftIds[i]) * 10;
-                        }
-                    }
-                }
+            for (String liftId: LiftIds) {
+                count += Integer.parseInt(liftId) * 10;
             }
 
             resp.setContentType("application/json");
-            if (storedEntry.keySet().isEmpty()) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            // url link 不对不会被处理
+            if (currentLiftID.isEmpty()) {
+                // resort 和这个skierId无关
                 resp.getWriter().write("{\"message\": \"Data not found\"}");
             } else {
-                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", season, count);
-                resp.setStatus(HttpServletResponse.SC_OK);
+                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, count);
                 resp.getWriter().write(msg);
-
             }
             jedis.close();
+            return;
         }
+
+
+        // Since your URL pattern for GET request is expected to be:
+        // /resorts/{resortID}/seasons/{seasonID}/day/{dayID}/skiers
+        // The length should be 7 (including the empty first element due to leading slash)
+
+
+        if (urlParts.length != 7) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"Message\": \"URL format is incorrect!\"}");
+            return;
+        }
+        JsonObject body = gson.fromJson(req.getReader(), JsonObject.class);
+        for (String param : RESORT_GET_BODY) {
+            if (body == null || body.get(param) == null) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                resp.getWriter().write("{\"Message\": \"Body param is missing!\"}");
+                return;
+            }
+        }
+
+        // Validate the URL
+        if (!isUrlValidForResortGet(urlParts)) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"Message\": \"URL parameters are invalid!\"}");
+            return;
+        }
+
+        int resortID = Integer.parseInt(urlParts[2]);
+        int seasonID = Integer.parseInt(urlParts[4]);
+        int dayID = Integer.parseInt(urlParts[6]);
+        // Redis logic to retrieve data goes here...
+        // For now, just sending a placeholder response
+
+        // Placeholder for Redis query logic
+        String redisResponse = "Query Redis for ResortID: " + resortID + ", SeasonID: " + seasonID + ", DayID: " + dayID;
+        resp.setContentType("application/json");
+        resp.setStatus(HttpServletResponse.SC_OK);
+        resp.getWriter().write(gson.toJson(redisResponse));
+
+
+        // Placeholder response until Redis integration is complete
+        resp.setStatus(HttpServletResponse.SC_OK);
+        resp.getWriter().write("{\"Message\": \"GET request processing not yet implemented.\"}");
     }
 
 
@@ -226,9 +298,6 @@ public class SkierServlet extends HttpServlet {
                     channel.close();
                 }
                 channelPool.clear();
-            }
-            if (jedisPool != null) {
-                jedisPool.close();
             }
             circuitBreaker = null;
         } catch (IOException | TimeoutException e) {
