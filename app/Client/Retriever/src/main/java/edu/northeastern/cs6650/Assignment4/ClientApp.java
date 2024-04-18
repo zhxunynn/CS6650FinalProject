@@ -4,25 +4,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import io.swagger.client.api.ResortsApi;
-import okhttp3.OkHttpClient;
+import io.swagger.client.api.SkiersApi;
 
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.*;
 
 /**
  * The type Client app.
  */
 public class ClientApp {
     private static final int REQUESTS_PER_THREAD = 1000;
-    private static final int INITIAL_THREAD_COUNT = 32;
-    private static final int TOTAL_REQUESTS = 200000;
+    private static final int INITIAL_THREAD_COUNT = Config.getThreadCount();
+    private static final int TOTAL_REQUESTS = Config.getNumOfReq();
 
     private static final AtomicInteger successCount = new AtomicInteger(0);
     private static final AtomicInteger failureCount = new AtomicInteger(0);
     private static final AtomicLong startTime = new AtomicLong(0);
     private static final AtomicLong endTime = new AtomicLong(0);
-    private static final ResortsApi apiClient = new ResortsApi();
+    private static final ResortsApi resortsApi = new ResortsApi();
+    private static final SkiersApi skierApi = new SkiersApi();
 
     /**
      * The constant processedRequests.
@@ -35,14 +34,20 @@ public class ClientApp {
      * @param args the input arguments
      */
     public static void main(String[] args) {
-        BlockingQueue<ResortGetParam> queue = new LinkedBlockingQueue<>();
+
+        Map<String, String> arguments = ArgCommandParser.parseArguments(args);
+        String queryType = arguments.get("queryType");
+
+        BlockingQueue<GetParam> queue = new LinkedBlockingQueue<>();
+        Producer producer = createProducer(queryType, queue, TOTAL_REQUESTS);
         startTime.set(System.currentTimeMillis());
-
-
-        ThreadPoolExecutor producerExecutorService = (ThreadPoolExecutor) Executors.newFixedThreadPool(INITIAL_THREAD_COUNT);
-        for (int i = 0; i < INITIAL_THREAD_COUNT; i++) {
-            producerExecutorService.submit(new ResortDataProducer(queue, TOTAL_REQUESTS / INITIAL_THREAD_COUNT));
+        if (producer != null) {
+            new Thread(producer).start();
+        } else {
+            System.out.println("Invalid query type provided.");
         }
+
+
 
         ThreadPoolExecutor consumerExecutorService = (ThreadPoolExecutor) Executors.newFixedThreadPool(INITIAL_THREAD_COUNT);
         ThreadPoolExecutor dynamicExecutorService = new ThreadPoolExecutor(
@@ -53,9 +58,10 @@ public class ClientApp {
                 Executors.defaultThreadFactory(),
                 new ThreadPoolExecutor.CallerRunsPolicy());
 
+        Consumer consumer = createConsumer(queryType, queue, TOTAL_REQUESTS);
         // Submit initial tasks to the initial pool
         for (int i = 0; i < INITIAL_THREAD_COUNT; i++) {
-            consumerExecutorService.submit(new ResortDataConsumer(queue, REQUESTS_PER_THREAD, apiClient));
+            consumerExecutorService.submit(consumer);
             processedReqNum.addAndGet(REQUESTS_PER_THREAD);
         }
 
@@ -66,7 +72,7 @@ public class ClientApp {
                 while (processedReqNum.get() < TOTAL_REQUESTS) {
                     // Ensure not to exceed total request count
                     if (processedReqNum.get() + REQUESTS_PER_THREAD <= TOTAL_REQUESTS) {
-                        dynamicExecutorService.submit(new ResortDataConsumer(queue, REQUESTS_PER_THREAD,apiClient));
+                        dynamicExecutorService.submit(consumer);
                         processedReqNum.addAndGet(REQUESTS_PER_THREAD);
                     }
                 }
@@ -108,5 +114,23 @@ public class ClientApp {
      */
     public static void incrementFailureCount() {
         failureCount.incrementAndGet();
+    }
+
+    private static Producer createProducer(String queryType, BlockingQueue<GetParam> queue, int numOfReqs) {
+        return switch (queryType) {
+            case "Resort" -> new ResortProducer(queue, numOfReqs);
+            case "SkierVertical" -> new SkierVerticalProducer(queue, numOfReqs);
+            case "SkierDay" -> new SkierDayProducer(queue, numOfReqs);
+            default -> null;
+        };
+    }
+
+    private static Consumer createConsumer(String queryType, BlockingQueue<GetParam> queue, int numOfReqs){
+        return switch (queryType) {
+            case "Resort" -> new ResortConsumer(queue, numOfReqs, resortsApi);
+            case "SkierVertical" -> new SkierVerticalConsumer(queue, numOfReqs, skierApi);
+            case "SkierDay" -> new SkierDayConsumer(queue, numOfReqs, skierApi);
+            default -> null;
+        };
     }
 }
