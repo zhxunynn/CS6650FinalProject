@@ -105,9 +105,6 @@ public class SkierServlet extends HttpServlet {
                 logger.error(Arrays.toString(e.getStackTrace()));
             }
         });
-//        response.setContentType("application/json");
-//        response.setStatus(HttpServletResponse.SC_OK);
-//        response.getWriter().write("{\"Message\": \"URL is not correct!\"}");
     }
 
     private void doPostWithCircuitBreaker(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
