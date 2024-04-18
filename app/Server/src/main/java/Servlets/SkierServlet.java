@@ -164,55 +164,58 @@ public class SkierServlet extends HttpServlet {
         return false;
     }
 
+    private boolean isUrlValidForSkierVerticalInOneDay(String[] urlPath) {
+        if (urlPath.length == 8) {
+            return  urlPath[0].equals("skiers") &&
+                    urlPath[1].chars().allMatch(Character::isDigit) &&
+                    urlPath[2].equals("seasons") &&
+                    urlPath[3].chars().allMatch(Character::isDigit) &&
+                    urlPath[4].equals("days") &&
+                    urlPath[5].chars().allMatch(Character::isDigit) &&
+                    urlPath[6].equals("skiers") &&
+                    urlPath[7].chars().allMatch(Character::isDigit);
+        }
+        return false;
+    }
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String[] urlParts = req.getPathInfo().split("/");
 
         //for vertical count
         boolean isCountTotalVertical = isUrlValidForSkiersVertical(urlParts);
-        boolean isCountTotalVerticalForOneDay = Utilities.isUrlValidForSkierVerticalInOneDay(urlParts);
+        boolean isCountTotalVerticalForOneDay = isUrlValidForSkierVerticalInOneDay(urlParts);
         if (isCountTotalVertical || isCountTotalVerticalForOneDay) {
             Jedis jedis = jedisPool.getResource();
             String skierId = urlParts[1];
-            String resort = isCountTotalVertical ? req.getParameter("resort") : urlParts[1];
-            String season = isCountTotalVertical ? req.getParameter("season") : urlParts[3];
-            String dayId = isCountTotalVerticalForOneDay ? urlParts[7] : null;
-            Map<String, String> storedEntry = jedis.hgetAll(skierId);
-            String[] resortIds = storedEntry.get("resortID").split("_");
-            String[] liftIds = storedEntry.get("liftID").split("_");
-            String[] seasonIds = null;
-            String[] dayIds = null;
-            if (season != null) {
-                seasonIds = storedEntry.get("seasonID").split("_");
-            }
-            if (dayId != null) {
-                dayIds = storedEntry.get("dayID").split("_");
-            }
+            String resortId = isCountTotalVertical ? req.getParameter("resort") : urlParts[1];
+            String seasonId = isCountTotalVertical ? req.getParameter("season") : urlParts[3];
+            // if season == null, season range is (2024, 2024) by Data Generation
+            // if dayId == null, day range is (1, 1) by Data Generation
+            // if season or dayId is not fixed, the structure should be replaced by for loop to count total
+            if (seasonId == null) seasonId = "2024";
+            String dayId = isCountTotalVerticalForOneDay ? urlParts[7] : "1";
+
+            String skiersKey = String.format("skiers/%s", skierId);
+            String skiersFieldLiftID = String.format("liftID/resort%s_season%s_day%s", resortId, seasonId, dayId);
+            String currentLiftID = jedis.hget(skiersKey, skiersFieldLiftID);
+            String[] LiftIds = currentLiftID.split("_");
             int count = 0;
-            for (int i = 0; i < resortIds.length; i++) {
-                if (resort.equals(resortIds[i])) {
-                    if (season != null && !season.equals(seasonIds[i])) continue;
-                    if (dayId == null) {
-                        count += Integer.parseInt(liftIds[i]) * 10;
-                    } else {
-                        if (dayId.equals(dayIds[i])) {
-                            count += Integer.parseInt(liftIds[i]) * 10;
-                        }
-                    }
-                }
+            for (String liftId: LiftIds) {
+                count += Integer.parseInt(liftId) * 10;
             }
 
             resp.setContentType("application/json");
-            if (storedEntry.keySet().isEmpty()) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            // url link 不对不会被处理
+            if (currentLiftID.isEmpty()) {
+                // resort 和这个skierId无关
                 resp.getWriter().write("{\"message\": \"Data not found\"}");
             } else {
-                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", season, count);
-                resp.setStatus(HttpServletResponse.SC_OK);
+                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, count);
                 resp.getWriter().write(msg);
-
             }
             jedis.close();
+            return;
         }
     }
 
