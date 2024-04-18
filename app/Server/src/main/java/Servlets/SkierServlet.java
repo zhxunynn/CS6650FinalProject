@@ -167,7 +167,6 @@ public class SkierServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String[] urlParts = req.getPathInfo().split("/");
-
         //for vertical count
         boolean isCountTotalVertical = isUrlValidForSkiersVertical(urlParts);
         boolean isCountTotalVerticalForOneDay = Utilities.isUrlValidForSkierVerticalInOneDay(urlParts);

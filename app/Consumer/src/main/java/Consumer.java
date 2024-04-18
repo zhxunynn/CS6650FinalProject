@@ -20,7 +20,6 @@ public class Consumer {
     private Connection connection;
     private Integer numThreads;
     private String rabbitMQName;
-
     private static JedisPool jedisPool;
     public static final Map<Integer, List<JsonObject>> records = new ConcurrentHashMap<>();
     public static final Logger logger = LoggerFactory.getLogger(Consumer.class);
