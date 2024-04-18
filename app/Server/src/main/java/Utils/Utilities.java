@@ -30,10 +30,19 @@ public class Utilities {
         return false;
     }
 
-    // skiers/{resortID}/seasons/{seasonID}/days/{dayID}/skiers/{skierID}
+    public static boolean isUrlValidForSkiersVertical(String[] urlPath) {
+        // Trim the leading slash if it exists
+        if (urlPath.length == 3) {
+            return
+                    urlPath[1].chars().allMatch(Character::isDigit) &&
+                    "vertical".equals(urlPath[2]);
+        }
+        return false;
+    }
+
     public static boolean isUrlValidForSkierVerticalInOneDay(String[] urlPath) {
         if (urlPath.length == 8) {
-            return  urlPath[0].equals("skiers") &&
+            return
                     urlPath[1].chars().allMatch(Character::isDigit) &&
                     urlPath[2].equals("seasons") &&
                     urlPath[3].chars().allMatch(Character::isDigit) &&

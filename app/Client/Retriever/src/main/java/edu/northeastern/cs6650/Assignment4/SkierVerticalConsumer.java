@@ -49,7 +49,7 @@ public class SkierVerticalConsumer extends Consumer{
                 SkierVertical json = skiersApi.getSkierResortTotals(event.getSkierID(), event.getResortList(), event.getSeasonList());
                 List<SkierVerticalResorts> SkierVerticalResorts = json.getResorts();
                 for (SkierVerticalResorts skierVerticalResort : SkierVerticalResorts) {
-                    System.out.println("Total vertical for the skier on Season" + skierVerticalResort.getSeasonID() + " is " + skierVerticalResort.getTotalVert()); // Correctly placed inside the try block
+                    System.out.println("Total vertical for the skier"+ event.getSkierID() + " on Season" + skierVerticalResort.getSeasonID() + " is " + skierVerticalResort.getTotalVert()); // Correctly placed inside the try block
                 }
                 ClientApp.incrementSuccessCount(); // Assuming ClientApp has this static method
                 success = true; // Break the loop on success
