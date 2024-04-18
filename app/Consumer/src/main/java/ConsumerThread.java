@@ -66,12 +66,18 @@ public class ConsumerThread implements Runnable{
             Consumer.logger.info(skiersFieldTime);
             String currentTimeInDB = jedis.hget(skiersKey, skiersFieldTime);
             currentTimeInDB = (currentTimeInDB == null) ? time : currentTimeInDB + DB_SEPARATOR + time;
-
             jedis.hset(skiersKey, skiersFieldTime, currentTimeInDB);
+
             String skiersFieldLiftID = String.format("liftID/resort%s_season%s_day%s", resortId, seasonId, dayId);
             String currentLiftID = jedis.hget(skiersKey, skiersFieldLiftID);
             currentLiftID = (currentLiftID == null) ? liftId : currentLiftID + DB_SEPARATOR + liftId;
             jedis.hset(skiersKey, skiersFieldLiftID, currentLiftID);
+
+            String skiersFieldTotalID = String.format("liftID/resort%s_season%s_total", resortId, seasonId);
+            String currentTotalLiftID = jedis.hget(skiersKey, skiersFieldTotalID);
+            currentTotalLiftID = (currentTotalLiftID == null) ? liftId :
+                    String.valueOf(Integer.parseInt(currentTotalLiftID) + Integer.parseInt(liftId));
+            jedis.hset(skiersKey, skiersFieldTotalID, currentTotalLiftID);
 
             // Database - Key Resorts
             String resortsKey = String.format("resorts/resort%s_season%s_day%s", resortId, seasonId, dayId);

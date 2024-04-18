@@ -11,6 +11,7 @@
         <option value="$PROJECT_DIR$/app/Server/pom.xml" />
         <option value="$PROJECT_DIR$/app/Consumer/pom.xml" />
         <option value="$PROJECT_DIR$/app/Client/Producer/pom.xml" />
+        <option value="$PROJECT_DIR$/app/Client/Retriever/pom.xml" />
       </list>
     </option>
   </component>

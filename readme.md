@@ -21,9 +21,10 @@ Group: Xunyan Zhang, Yiwei Zha, Fengjiao Sheng
 1. KEY skiers/skierID: hash
    * FIELD time/resort{resortID}_season{seasonID}_day{dayID}: list/str
    * FIELD liftID/resort{resortID}_season{seasonID}_day{dayID}: list/str
+   * FIELD liftID/resort{resortID}_season{seasonID}_total: str/int
 2. KEY resorts/resort{resortID}_season{seasonID}_day{dayID}: set (skierID)
 3. KEY cache/resort{resortID}_season{seasonID}: hash
-   * FIELD skierID{skierID}/vertical: int (total verticals for skierID)
+   * FIELD skierID{skierID}/vertical: int (total verticals for skierID) // optional as we add the third field for skiers/skierID 
    * FIELD skierID{skierID}/dayID{dayID}: int (vertical at dayID)
    * FIELD resorts/dayID{dayID}: int (unique numbers of skiers)
 ![img.png](misc/attachments/img.png)
