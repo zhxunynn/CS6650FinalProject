@@ -8,6 +8,8 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import io.swagger.client.model.LiftRide;
+import io.swagger.client.model.SkierVertical;
+import io.swagger.client.model.SkierVerticalResorts;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -93,6 +95,10 @@ public class SkierServlet extends HttpServlet {
             }
         } catch (IOException | TimeoutException e) {
             logger.error(Arrays.toString(e.getStackTrace()));
+            throw new ServletException("Failed to initialize SkierServlet due to critical system error.", e);
+        }
+        if (channelPool == null || channelPool.isEmpty()) {
+            throw new ServletException("Channel pool did not initialize correctly.");
         }
     }
 
@@ -181,9 +187,16 @@ public class SkierServlet extends HttpServlet {
                 resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 resp.getWriter().write("{\"message\": \"Data not found\"}");
             } else {
-                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, total);
+                // Create the SkierVerticalResorts object
+                SkierVerticalResorts skierResorts = new SkierVerticalResorts();
+                skierResorts.setSeasonID(seasonId);
+                skierResorts.setTotalVert(Integer.parseInt(total));
+
+// Create the SkierVertical object and add the resorts item
+                SkierVertical skierVertical = new SkierVertical();
+                skierVertical.addResortsItem(skierResorts);
                 resp.setStatus(HttpServletResponse.SC_OK);
-                resp.getWriter().write(msg);
+                resp.getWriter().write(gson.toJson(skierVertical));
             }
             jedis.close();
         } else if (isUrlValidForSkierVerticalInOneDay(urlParts)) {
@@ -215,6 +228,43 @@ public class SkierServlet extends HttpServlet {
                     // jedis set cache
                     jedis.set(cacheKey, String.valueOf(count));
                     resp.getWriter().write(msg);
+                }
+            }
+            jedis.close();
+        } else {
+            resp.getWriter().write("{\"message\": \"Invalid inouts supplied\"}");
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        }
+        if (isUrlValidForSkierVerticalInOneDay(urlParts)) {
+            Jedis jedis = jedisPool.getResource();
+            String resortId = urlParts[1];
+            String seasonId = urlParts[3];
+            String dayId = urlParts[5];
+            String skierId = urlParts[7];
+            String skiersKey = String.format("skiers/%s", skierId);
+            String cacheKey = String.format("cache/resort%s_season%s_day%s", resortId, seasonId, dayId);
+            String cacheData = jedis.hget(skiersKey, cacheKey);
+            if (cacheData != null) {
+                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, cacheData);
+                resp.getWriter().write(msg);
+            } else {
+                int count = 0;
+                String skiersFieldLiftID = String.format("liftID/resort%s_season%s_day%s", resortId, seasonId, dayId);
+                String currentLiftID = jedis.hget(skiersKey, skiersFieldLiftID);
+                if (currentLiftID.isEmpty()) {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"message\": \"Data not found\"}");
+                } else {
+                    String[] LiftIds = currentLiftID.split("_");
+                    for (String liftId: LiftIds) {
+                        count += Integer.parseInt(liftId) * 10;
+                    }
+
+                    resp.setStatus(HttpServletResponse.SC_OK);
+
+                    // jedis set cache
+                    jedis.set(cacheKey, String.valueOf(count));
+                    resp.getWriter().write(count);
                 }
             }
             jedis.close();

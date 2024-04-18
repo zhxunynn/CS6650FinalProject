@@ -1,11 +1,13 @@
 package edu.northeastern.cs6650.Assignment4;
 
 import io.swagger.client.ApiException;
+import io.swagger.client.JSON;
 import io.swagger.client.api.ResortsApi;
 import io.swagger.client.api.SkiersApi;
 import io.swagger.client.model.ResortSkiers;
 
 import java.util.concurrent.BlockingQueue;
+
 
 public class SkierDayConsumer extends Consumer{
     private final SkiersApi skiersApi;
@@ -41,8 +43,8 @@ public class SkierDayConsumer extends Consumer{
 
         while (!success && attempts < maxRetries && !Thread.currentThread().isInterrupted()) {
             try {
-                int skiersVertical = skiersApi.getSkierDayVertical(event.getResortID(), String.valueOf(event.getSeasonID()), String.valueOf(event.getDayID()), event.getSkierID());
-                System.out.println("Total vertical for the skier at resort 1 on day " + event.getDayID() + "season" + event.getSeasonID()+ " is " + skiersVertical ); // Correctly placed inside the try block // Correctly placed inside the try block
+                Integer skiersVertical = skiersApi.getSkierDayVertical(event.getResortID(), String.valueOf(event.getSeasonID()), String.valueOf(event.getDayID()), event.getSkierID());
+                System.out.println("Total vertical for the skier" + event.getSkierID() + " at resort 1 on day " + event.getDayID() + "season" + event.getSeasonID()+ " is " + skiersVertical );
                 ClientApp.incrementSuccessCount(); // Assuming ClientApp has this static method
                 success = true; // Break the loop on success
             } catch (ApiException e) {

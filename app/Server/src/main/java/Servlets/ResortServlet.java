@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import io.swagger.client.model.ResortSkiers;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -130,11 +131,17 @@ public class ResortServlet extends HttpServlet {
         }
 
         // Placeholder for Redis query logic
-        String redisRespContent = String.format("The unique skiers for Resort %d, Season %d at Day %d is %d",
-                resortID, seasonID, dayID, uniqueSkiers);
+        ResortSkiers skiers = new ResortSkiers();
+        skiers.setNumSkiers(uniqueSkiers);
+        skiers.setTime("Provided or calculated time");  // Assuming you have some time data to include
+
+        Gson gson = new Gson();
+        String jsonResponse = gson.toJson(skiers);
+
+        // Send the response
         resp.setContentType("application/json");
         resp.setStatus(HttpServletResponse.SC_OK);
-        resp.getWriter().write(gson.toJson(redisRespContent));
+        resp.getWriter().write(jsonResponse);
     }
 
 
