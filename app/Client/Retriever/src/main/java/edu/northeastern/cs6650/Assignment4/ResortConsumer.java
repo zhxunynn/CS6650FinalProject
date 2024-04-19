@@ -41,7 +41,11 @@ public class ResortConsumer extends Consumer{
         while (!success && attempts < maxRetries && !Thread.currentThread().isInterrupted()) {
             try {
                 ResortSkiers skiers = resortsApi.getResortSkiersDay(event.getResortID(), event.getSeasonID(), event.getDayID());
-                System.out.println("Unique skiers: " + skiers.getNumSkiers() + " at: Day " + event.getDayID() + ", Resort " + event.getResortID() + " , Season" + event.getSeasonID()); // Correctly placed inside the try block
+                System.out.println(String.format("Unique skiers: %d at: Day %d, Resort %d, Season %d",
+                        skiers.getNumSkiers(),
+                        event.getDayID(),
+                        event.getResortID(),
+                        event.getSeasonID()));
                 ClientApp.incrementSuccessCount(); // Assuming ClientApp has this static method
                 success = true; // Break the loop on success
             } catch (ApiException e) {

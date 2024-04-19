@@ -44,7 +44,11 @@ public class SkierDayConsumer extends Consumer{
         while (!success && attempts < maxRetries && !Thread.currentThread().isInterrupted()) {
             try {
                 Integer skiersVertical = skiersApi.getSkierDayVertical(event.getResortID(), String.valueOf(event.getSeasonID()), String.valueOf(event.getDayID()), event.getSkierID());
-                System.out.println("Total vertical for the skier" + event.getSkierID() + " at resort 1 on day " + event.getDayID() + "season" + event.getSeasonID()+ " is " + skiersVertical );
+                System.out.println(String.format("Total vertical for the skier %d at resort 1 on day %d season %d is %d",
+                        event.getSkierID(),
+                        event.getDayID(),
+                        event.getSeasonID(),
+                        skiersVertical));
                 ClientApp.incrementSuccessCount(); // Assuming ClientApp has this static method
                 success = true; // Break the loop on success
             } catch (ApiException e) {
