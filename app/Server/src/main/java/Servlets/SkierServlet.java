@@ -172,6 +172,8 @@ public class SkierServlet extends HttpServlet {
             Jedis jedis = jedisPool.getResource();
             String skierId = urlParts[1];
             String skiersKey = String.format("skiers/%s", skierId);
+            // Create the SkierVerticalResorts object
+            SkierVerticalResorts skierResorts = new SkierVerticalResorts();
             List<String> resortIDs = List.of(req.getParameterValues("resort"));
             List<String> seasonIDs = List.of(req.getParameterValues("season"));
             for (String resortId : resortIDs) {
@@ -181,20 +183,18 @@ public class SkierServlet extends HttpServlet {
                     if (total == null) {
                         resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                         resp.getWriter().write("{\"message\": \"Data not found\"}");
+                        return;
                     } else {
-                        // Create the SkierVerticalResorts object
-                        SkierVerticalResorts skierResorts = new SkierVerticalResorts();
                         skierResorts.setSeasonID(seasonId);
                         skierResorts.setTotalVert(Integer.parseInt(total));
-
-// Create the SkierVertical object and add the resorts item
-                        SkierVertical skierVertical = new SkierVertical();
-                        skierVertical.addResortsItem(skierResorts);
-                        resp.setStatus(HttpServletResponse.SC_OK);
-                        resp.getWriter().write(gson.toJson(skierVertical));
                     }
                 }
             }
+            // Create the SkierVertical object and add the resorts item
+            SkierVertical skierVertical = new SkierVertical();
+            skierVertical.addResortsItem(skierResorts);
+            resp.setStatus(HttpServletResponse.SC_OK);
+            resp.getWriter().write(gson.toJson(skierVertical));
             jedis.close();
         } else if (isUrlValidForSkierVerticalInOneDay(urlParts)) {
             Jedis jedis = jedisPool.getResource();
