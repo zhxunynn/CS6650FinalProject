@@ -9,7 +9,6 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
 
@@ -22,15 +21,13 @@ public class Consumer {
     private Integer numThreads;
     private String rabbitMQName;
 
-
     private static JedisPool jedisPool;
     public static final Map<Integer, List<JsonObject>> records = new ConcurrentHashMap<>();
     public static final Logger logger = LoggerFactory.getLogger(Consumer.class);
 
-
     Consumer(String configPath) {
-        Path rabbitMQConfigPath = Paths.get(configPath);
         ConnectionFactory connectionFactory = new ConnectionFactory();
+        Path rabbitMQConfigPath = Paths.get(configPath);
         try {
             try (Stream<String> lines = Files.lines(rabbitMQConfigPath)) {
                 List<String> configs = lines
