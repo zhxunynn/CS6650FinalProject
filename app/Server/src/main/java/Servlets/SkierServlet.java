@@ -36,6 +36,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
+import static Utils.Utilities.isUrlValidForSkierVerticalInOneDay;
+import static Utils.Utilities.isUrlValidForSkiersVertical;
 @WebServlet(name = "SkierServlet", urlPatterns = {"/skiers/*"})
 public class SkierServlet extends HttpServlet {
     private static final String[] SKIER_POST_BODY = new String[]{"time", "liftID"};
@@ -95,7 +97,7 @@ public class SkierServlet extends HttpServlet {
     }
 
     @Override
-    public void doPost(HttpServletRequest request, HttpServletResponse response) {
+    public void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
         circuitBreaker.executeRunnable(() -> {
             try {
                 doPostWithCircuitBreaker(request, response);
@@ -155,64 +157,70 @@ public class SkierServlet extends HttpServlet {
                 channelPool.add(channel);
         }
     }
-    private boolean isUrlValidForSkiersVertical(String[] urlPath) {
-        if (urlPath.length == 3) {
-            return  urlPath[0].equals("skiers") &&
-                    urlPath[1].chars().allMatch(Character::isDigit) &&
-                    urlPath[2].equals("vertical");
-        }
-        return false;
-    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        resp.setContentType("application/json");
         String[] urlParts = req.getPathInfo().split("/");
-
-        //for vertical count
-        boolean isCountTotalVertical = isUrlValidForSkiersVertical(urlParts);
-        boolean isCountTotalVerticalForOneDay = Utilities.isUrlValidForSkierVerticalInOneDay(urlParts);
-        if (isCountTotalVertical || isCountTotalVerticalForOneDay) {
+        if (isUrlValidForSkiersVertical(urlParts)) {
             Jedis jedis = jedisPool.getResource();
             String skierId = urlParts[1];
-            String resort = isCountTotalVertical ? req.getParameter("resort") : urlParts[1];
-            String season = isCountTotalVertical ? req.getParameter("season") : urlParts[3];
-            String dayId = isCountTotalVerticalForOneDay ? urlParts[7] : null;
-            Map<String, String> storedEntry = jedis.hgetAll(skierId);
-            String[] resortIds = storedEntry.get("resortID").split("_");
-            String[] liftIds = storedEntry.get("liftID").split("_");
-            String[] seasonIds = null;
-            String[] dayIds = null;
-            if (season != null) {
-                seasonIds = storedEntry.get("seasonID").split("_");
+            String skiersKey = String.format("skiers/%s", skierId);
+            String resortId = req.getParameter("resort");
+            if (resortId == null) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                resp.getWriter().write("{\"message\": \"Invalid inouts supplied\"}");
+                return;
             }
-            if (dayId != null) {
-                dayIds = storedEntry.get("dayID").split("_");
-            }
-            int count = 0;
-            for (int i = 0; i < resortIds.length; i++) {
-                if (resort.equals(resortIds[i])) {
-                    if (season != null && !season.equals(seasonIds[i])) continue;
-                    if (dayId == null) {
-                        count += Integer.parseInt(liftIds[i]) * 10;
-                    } else {
-                        if (dayId.equals(dayIds[i])) {
-                            count += Integer.parseInt(liftIds[i]) * 10;
-                        }
-                    }
-                }
-            }
-
-            resp.setContentType("application/json");
-            if (storedEntry.keySet().isEmpty()) {
+            String seasonId = req.getParameter("season");
+            // if season == null, season range is (2024, 2024) by Data Generation
+            if (seasonId == null) seasonId = "2024";
+            String totalField = String.format("liftID/resort%s_season%s_total", resortId, seasonId);
+            String total = jedis.hget(skiersKey, totalField);
+            if (total == null) {
                 resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 resp.getWriter().write("{\"message\": \"Data not found\"}");
             } else {
-                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", season, count);
+                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, total);
                 resp.setStatus(HttpServletResponse.SC_OK);
                 resp.getWriter().write(msg);
-
             }
             jedis.close();
+        } else if (isUrlValidForSkierVerticalInOneDay(urlParts)) {
+            Jedis jedis = jedisPool.getResource();
+            String resortId = urlParts[1];
+            String seasonId = urlParts[3];
+            String dayId = urlParts[5];
+            String skierId = urlParts[7];
+            String skiersKey = String.format("skiers/%s", skierId);
+            String cacheKey = String.format("cache/resort%s_season%s_day%s", resortId, seasonId, dayId);
+            String cacheData = jedis.hget(skiersKey, cacheKey);
+            if (cacheData != null) {
+                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, cacheData);
+                resp.getWriter().write(msg);
+            } else {
+                int count = 0;
+                String skiersFieldLiftID = String.format("liftID/resort%s_season%s_day%s", resortId, seasonId, dayId);
+                String currentLiftID = jedis.hget(skiersKey, skiersFieldLiftID);
+                if (currentLiftID.isEmpty()) {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"message\": \"Data not found\"}");
+                } else {
+                    String[] LiftIds = currentLiftID.split("_");
+                    for (String liftId: LiftIds) {
+                        count += Integer.parseInt(liftId) * 10;
+                    }
+                    String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, count);
+                    resp.setStatus(HttpServletResponse.SC_OK);
+                    // jedis set cache
+                    jedis.set(cacheKey, String.valueOf(count));
+                    resp.getWriter().write(msg);
+                }
+            }
+            jedis.close();
+        } else {
+            resp.getWriter().write("{\"message\": \"Invalid inouts supplied\"}");
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
         }
     }
 
