@@ -34,8 +34,7 @@ public class Utilities {
         // Trim the leading slash if it exists
         if (urlPath.length == 3) {
             return
-                    urlPath[1].chars().allMatch(Character::isDigit) &&
-                    "vertical".equals(urlPath[2]);
+                    urlPath[1].chars().allMatch(Character::isDigit) && urlPath[2].equals("vertical");
         }
         return false;
     }
