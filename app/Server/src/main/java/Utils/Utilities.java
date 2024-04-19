@@ -31,17 +31,17 @@ public class Utilities {
     }
 
     public static boolean isUrlValidForSkiersVertical(String[] urlPath) {
+        // Trim the leading slash if it exists
         if (urlPath.length == 3) {
-            return  urlPath[0].equals("skiers") &&
-                    urlPath[1].chars().allMatch(Character::isDigit) &&
-                    urlPath[2].equals("vertical");
+            return
+                    urlPath[1].chars().allMatch(Character::isDigit) && urlPath[2].equals("vertical");
         }
         return false;
     }
 
     public static boolean isUrlValidForSkierVerticalInOneDay(String[] urlPath) {
         if (urlPath.length == 8) {
-            return  urlPath[0].equals("skiers") &&
+            return
                     urlPath[1].chars().allMatch(Character::isDigit) &&
                     urlPath[2].equals("seasons") &&
                     urlPath[3].chars().allMatch(Character::isDigit) &&

@@ -13,8 +13,8 @@ public class SkierVerticalProducer extends Producer {
     private final int THREAD_COUNT; // Number of threads in the pool
 
     private AtomicInteger skierIdCounter = new AtomicInteger(1);
-    private List<String> resortList;
-    private List<String> seasonList;
+    private List<String> resortList = new ArrayList<>();
+    private List<String> seasonList = new ArrayList<>();
 
 
     public SkierVerticalProducer(BlockingQueue<GetParam> queue, int totalEvents) {

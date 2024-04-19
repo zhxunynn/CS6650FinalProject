@@ -8,6 +8,8 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import io.swagger.client.model.LiftRide;
+import io.swagger.client.model.SkierVertical;
+import io.swagger.client.model.SkierVerticalResorts;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -93,6 +95,10 @@ public class SkierServlet extends HttpServlet {
             }
         } catch (IOException | TimeoutException e) {
             logger.error(Arrays.toString(e.getStackTrace()));
+            throw new ServletException("Failed to initialize SkierServlet due to critical system error.", e);
+        }
+        if (channelPool == null || channelPool.isEmpty()) {
+            throw new ServletException("Channel pool did not initialize correctly.");
         }
     }
 
@@ -166,25 +172,29 @@ public class SkierServlet extends HttpServlet {
             Jedis jedis = jedisPool.getResource();
             String skierId = urlParts[1];
             String skiersKey = String.format("skiers/%s", skierId);
-            String resortId = req.getParameter("resort");
-            if (resortId == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"message\": \"Invalid inouts supplied\"}");
-                return;
+            // Create the SkierVerticalResorts object
+            SkierVerticalResorts skierResorts = new SkierVerticalResorts();
+            List<String> resortIDs = List.of(req.getParameterValues("resort"));
+            List<String> seasonIDs = List.of(req.getParameterValues("season"));
+            for (String resortId : resortIDs) {
+                for (String seasonId : seasonIDs) {
+                    String totalField = String.format("liftID/resort%s_season%s_total", resortId, seasonId);
+                    String total = jedis.hget(skiersKey, totalField);
+                    if (total == null) {
+                        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                        resp.getWriter().write("{\"message\": \"Data not found\"}");
+                        return;
+                    } else {
+                        skierResorts.setSeasonID(seasonId);
+                        skierResorts.setTotalVert(Integer.parseInt(total));
+                    }
+                }
             }
-            String seasonId = req.getParameter("season");
-            // if season == null, season range is (2024, 2024) by Data Generation
-            if (seasonId == null) seasonId = "2024";
-            String totalField = String.format("liftID/resort%s_season%s_total", resortId, seasonId);
-            String total = jedis.hget(skiersKey, totalField);
-            if (total == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"message\": \"Data not found\"}");
-            } else {
-                String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, total);
-                resp.setStatus(HttpServletResponse.SC_OK);
-                resp.getWriter().write(msg);
-            }
+            // Create the SkierVertical object and add the resorts item
+            SkierVertical skierVertical = new SkierVertical();
+            skierVertical.addResortsItem(skierResorts);
+            resp.setStatus(HttpServletResponse.SC_OK);
+            resp.getWriter().write(gson.toJson(skierVertical));
             jedis.close();
         } else if (isUrlValidForSkierVerticalInOneDay(urlParts)) {
             Jedis jedis = jedisPool.getResource();
@@ -210,11 +220,10 @@ public class SkierServlet extends HttpServlet {
                     for (String liftId: LiftIds) {
                         count += Integer.parseInt(liftId) * 10;
                     }
-                    String msg = String.format("{ \"resorts\": [{\"seasonID\": \"%s\",\"totalVert\": %s}]}", seasonId, count);
                     resp.setStatus(HttpServletResponse.SC_OK);
                     // jedis set cache
                     jedis.set(cacheKey, String.valueOf(count));
-                    resp.getWriter().write(msg);
+                    resp.getWriter().write(String.valueOf(count));
                 }
             }
             jedis.close();
