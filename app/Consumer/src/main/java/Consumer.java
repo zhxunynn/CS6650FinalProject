@@ -22,18 +22,17 @@ public class Consumer {
     private Integer numThreads;
     private String rabbitMQName;
 
-    public final String RABBIT_CONFIG_FILE = "rabbitmq.conf";
 
     private static JedisPool jedisPool;
     public static final Map<Integer, List<JsonObject>> records = new ConcurrentHashMap<>();
     public static final Logger logger = LoggerFactory.getLogger(Consumer.class);
 
 
-    Consumer() {
-        Path configPath = Paths.get(Objects.requireNonNull(this.getClass().getClassLoader().getResource(RABBIT_CONFIG_FILE)).getPath());
+    Consumer(String configPath) {
+        Path rabbitMQConfigPath = Paths.get(configPath);
         ConnectionFactory connectionFactory = new ConnectionFactory();
         try {
-            try (Stream<String> lines = Files.lines(configPath)) {
+            try (Stream<String> lines = Files.lines(rabbitMQConfigPath)) {
                 List<String> configs = lines
                         .map(String::trim)
                         .toList();
@@ -52,7 +51,7 @@ public class Consumer {
         }
     }
     public static void main(String[] args) {
-        Consumer consumer = new Consumer();
+        Consumer consumer = new Consumer(args[0]);
         ExecutorService pool = Executors.newFixedThreadPool(consumer.getNumThreads());
         for(int i=0; i< consumer.getNumThreads(); i++)
             pool.execute(new ConsumerThread(consumer.getRabbitMQName(), consumer.getConnection(), jedisPool));
