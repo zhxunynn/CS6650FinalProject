@@ -172,32 +172,28 @@ public class SkierServlet extends HttpServlet {
             Jedis jedis = jedisPool.getResource();
             String skierId = urlParts[1];
             String skiersKey = String.format("skiers/%s", skierId);
-            String resortId = "1";
-//            String resortId = req.getParameter("resort");
-//            if (resortId == null) {
-//                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-//                resp.getWriter().write("{\"message\": \"Invalid inouts supplied\"}");
-//                return;
-//            }
-            String seasonId = req.getParameter("season");
-            // if season == null, season range is (2024, 2024) by Data Generation
-            if (seasonId == null) seasonId = "2024";
-            String totalField = String.format("liftID/resort%s_season%s_total", resortId, seasonId);
-            String total = jedis.hget(skiersKey, totalField);
-            if (total == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"message\": \"Data not found\"}");
-            } else {
-                // Create the SkierVerticalResorts object
-                SkierVerticalResorts skierResorts = new SkierVerticalResorts();
-                skierResorts.setSeasonID(seasonId);
-                skierResorts.setTotalVert(Integer.parseInt(total));
+            List<String> resortIDs = List.of(req.getParameterValues("resort"));
+            List<String> seasonIDs = List.of(req.getParameterValues("season"));
+            for (String resortId : resortIDs) {
+                for (String seasonId : seasonIDs) {
+                    String totalField = String.format("liftID/resort%s_season%s_total", resortId, seasonId);
+                    String total = jedis.hget(skiersKey, totalField);
+                    if (total == null) {
+                        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                        resp.getWriter().write("{\"message\": \"Data not found\"}");
+                    } else {
+                        // Create the SkierVerticalResorts object
+                        SkierVerticalResorts skierResorts = new SkierVerticalResorts();
+                        skierResorts.setSeasonID(seasonId);
+                        skierResorts.setTotalVert(Integer.parseInt(total));
 
 // Create the SkierVertical object and add the resorts item
-                SkierVertical skierVertical = new SkierVertical();
-                skierVertical.addResortsItem(skierResorts);
-                resp.setStatus(HttpServletResponse.SC_OK);
-                resp.getWriter().write(gson.toJson(skierVertical));
+                        SkierVertical skierVertical = new SkierVertical();
+                        skierVertical.addResortsItem(skierResorts);
+                        resp.setStatus(HttpServletResponse.SC_OK);
+                        resp.getWriter().write(gson.toJson(skierVertical));
+                    }
+                }
             }
             jedis.close();
         } else if (isUrlValidForSkierVerticalInOneDay(urlParts)) {
